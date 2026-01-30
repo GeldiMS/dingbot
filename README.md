@@ -21,12 +21,6 @@ Have the following variables in your .env file
     EXCHANGE_API_KEY=
     EXCHANGE_SECRET_KEY=
 
-If you want to customize the strategy variables add the following to your liking:
-
-    SL_PERCENTAGE=
-    TP_PERCENTAGE=
-
-
 If you want to use a discord bot you must add the following variables:
 
     USE_DISCORD=true

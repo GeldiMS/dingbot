@@ -25,7 +25,6 @@ if USE_DISCORD:
     from exchange import (
         USE_FIXED_RISK,
         SL_PERCENTAGE,
-        TP_PERCENTAGE,
         FORBIDDEN_NR_OF_CANDLES_BEFORE_ENTRY,
     )
 
@@ -37,7 +36,6 @@ if USE_DISCORD:
         minimal_liquidation=MINIMAL_LIQUIDATION,
         interval=INTERVAL,
         sl_percentage=SL_PERCENTAGE,
-        tp_percentage=TP_PERCENTAGE,
         liquidation_days=LIQUIDATION_DAYS,
         liquidation_hours=LIQUIDATION_HOURS,
         forbidden_nr_of_candles_before_entry=FORBIDDEN_NR_OF_CANDLES_BEFORE_ENTRY,

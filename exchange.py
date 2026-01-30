@@ -1,8 +1,9 @@
 from asyncio import sleep
 from copy import deepcopy
+import os
 import ccxt.pro as ccxt
 from coinalyze_scanner import CoinalyzeScanner
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from decouple import config, Csv
 from logger import logger
 from misc import (
@@ -13,6 +14,7 @@ from misc import (
     PositionToOpen,
     TPLimitOrderToPlace,
 )
+import pandas as pd
 from typing import List, Tuple
 
 from discord_client import USE_DISCORD, get_discord_table
@@ -65,12 +67,10 @@ else:
 # strategy
 SL_PERCENTAGE = config("SL_PERCENTAGE", cast=float, default="1")
 logger.info(f"{SL_PERCENTAGE=}")
-TP_PERCENTAGE = config("TP_PERCENTAGE", cast=float, default="2")
-logger.info(f"{TP_PERCENTAGE=}")
 FORBIDDEN_NR_OF_CANDLES_BEFORE_ENTRY = config(
     "FORBIDDEN_NR_OF_CANDLES_BEFORE_ENTRY",
     cast=Csv(int),
-    default="1,10,11,12,13",
+    default="1",
 )
 
 
@@ -428,11 +428,24 @@ class Exchange:
                 )
             )
 
+        amount = round(
+            self.position_size
+            * (
+                position_to_open.long_weight
+                if long_above
+                else position_to_open.short_weight
+            ),
+            1,
+        )
+        amount = max(amount, 0.1)  # minimum amount is 0.1 contract
+        takeprofit_percentage = (
+            position_to_open.long_tp if long_above else position_to_open.short_tp
+        )
         price, stoploss_price, takeprofit_price = await self.limit_order_placement(
             direction=LONG if long_above else SHORT,
-            amount=self.position_size,
+            amount=amount,
             stoploss_percentage=SL_PERCENTAGE,
-            takeprofit_percentage=TP_PERCENTAGE,
+            takeprofit_percentage=takeprofit_percentage,
         )
 
         if USE_DISCORD:
@@ -442,7 +455,7 @@ class Exchange:
                 price=price,
                 stoploss_price=stoploss_price,
                 takeprofit_price=takeprofit_price,
-                amount=self.position_size,
+                amount=amount,
             )
 
     async def check_if_entry_orders_are_closed(self) -> None:
@@ -521,6 +534,36 @@ class Exchange:
                             )
                         )
 
+    async def get_algorithm_input_file(
+        self, strategy_type: str, input_date: date
+    ) -> pd.DataFrame:
+        """Get the algorithm input file for the given strategy type and date"""
+
+        try:
+            # try the current day first
+            algorithm_input: pd.DataFrame = pd.read_csv(
+                f"algorithm_input/algorithm_input-{input_date}-{strategy_type}.csv"
+            )
+            return algorithm_input
+        except:
+            file_names = os.listdir("algorithm_input/")
+            file_names = [
+                name
+                for name in os.listdir("algorithm_input/")
+                if os.path.isfile(os.path.join("algorithm_input/", name))
+            ]
+            file_names = [
+                name
+                for name in file_names
+                if (name.startswith("algorithm_input-") and strategy_type in name)
+            ]
+            file_names.sort()
+            last_file_name = file_names[-1]
+            algorithm_input: pd.DataFrame = pd.read_csv(
+                f"algorithm_input/{last_file_name}"
+            )
+            return algorithm_input
+
     async def handle_liquidation(
         self, liquidation: Liquidation, last_candle: Candle
     ) -> None:
@@ -545,27 +588,82 @@ class Exchange:
             )
             self.liquidation_set.liquidations.remove(liquidation)
 
-            long_above = short_below = cancel_above = cancel_below = None
+            # read live algorithm input file
+            live_trade: bool = False
+            live_algorithm_input: pd.DataFrame = await self.get_algorithm_input_file(
+                strategy_type="live", input_date=liquidation_datetime.date()
+            )
+            for row in live_algorithm_input.itertuples():
+                if row.hour_of_the_day == liquidation_datetime.hour:
+                    live_trade = row.trade
+                    if live_trade:
+                        live_tp: int = row.tp_percentage
+                        live_weight: float = row.position_size_weighted
+
+            # read reversed algorithm input file
+            reversed_trade: bool = False
+            reversed_algorithm_input: pd.DataFrame = (
+                await self.get_algorithm_input_file(
+                    strategy_type="reversed", input_date=liquidation_datetime.date()
+                )
+            )
+            for row in reversed_algorithm_input.itertuples():
+                if row.hour_of_the_day == liquidation_datetime.hour:
+                    reversed_trade = row.trade
+                    if reversed_trade:
+                        reversed_tp: int = row.tp_percentage
+                        reversed_weight: float = row.position_size_weighted
+
+            long_above = short_below = short_tp = short_weight = long_tp = (
+                long_weight
+            ) = cancel_above = cancel_below = None
+
             if liquidation.direction == LONG:
-                short_below = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
-                if candles_before_confirmation > 1:
-                    cancel_above = round(
-                        last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION
-                    )
+                below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
+                if reversed_trade:
+                    short_below = below_price
+                    short_tp = reversed_tp
+                    short_weight = reversed_weight
                 else:
-                    long_above = round(
-                        last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION
-                    )
+                    cancel_below = below_price
+
+                above_price = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
+                if candles_before_confirmation > 1:
+                    cancel_above = above_price
+                else:
+                    if live_trade:
+                        long_above = above_price
+                        long_tp = live_tp
+                        long_weight = live_weight
+                    else:
+                        cancel_above = above_price
+
             elif liquidation.direction == SHORT:
-                long_above = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
-                if candles_before_confirmation > 1:
-                    cancel_below = round(
-                        last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION
-                    )
+                above_price = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
+                if reversed_trade:
+                    long_above = above_price
+                    long_tp = reversed_tp
+                    long_weight = reversed_weight
                 else:
-                    short_below = round(
-                        last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION
-                    )
+                    cancel_above = above_price
+
+                below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
+                if candles_before_confirmation > 1:
+                    cancel_below = below_price
+                else:
+                    if live_trade:
+                        short_below = below_price
+                        short_tp = live_tp
+                        short_weight = live_weight
+                    else:
+                        cancel_below = below_price
+
+            if cancel_above and cancel_below:
+                # both cancel_above and cancel_below are set, no need to place order
+                logger.info(
+                    f"Both cancel_above and cancel_below are set for liquidation {liquidation._id}, skipping position to open."
+                )
+                return
 
             position_to_open = PositionToOpen(
                 _id=liquidation._id,
@@ -573,6 +671,10 @@ class Exchange:
                 candles_before_confirmation=candles_before_confirmation,
                 long_above=long_above,
                 short_below=short_below,
+                short_tp=short_tp,
+                short_weight=short_weight,
+                long_tp=long_tp,
+                long_weight=long_weight,
                 cancel_above=cancel_above,
                 cancel_below=cancel_below,
             )

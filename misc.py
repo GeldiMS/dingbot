@@ -96,8 +96,12 @@ class PositionToOpen:
     liquidation: Liquidation
     candles_before_confirmation: int
     long_above: float | None
-    cancel_above: float | None
+    long_tp: int | None
+    long_weight: float | None
     short_below: float | None
+    short_tp: int | None
+    short_weight: float | None
+    cancel_above: float | None
     cancel_below: float | None
 
     def init_message_dict(self) -> dict:
@@ -106,13 +110,22 @@ class PositionToOpen:
         message_dict = dict(_id=self._id)
         message_dict["candles before confirmation"] = self.candles_before_confirmation
         if self.long_above:
-            message_dict["long above"] = f"$ {self.long_above:,}"
-        if self.cancel_above:
-            message_dict["no order above"] = f"$ {self.cancel_above:,}"
+            message_dict["long"] = dict(
+                above=f"$ {self.long_above:,}",
+                target=f"{self.long_tp}%",
+                size=f"{self.long_weight}%",
+            )
         if self.short_below:
-            message_dict["short below"] = f"$ {self.short_below:,}"
+            message_dict["short"] = dict(
+                below=f"$ {self.short_below:,}",
+                target=f"{self.short_tp}%",
+                size=f"{self.short_weight}%",
+            )
+
         if self.cancel_below:
             message_dict["no order below"] = f"$ {self.cancel_below:,}"
+        if self.cancel_above:
+            message_dict["no order above"] = f"$ {self.cancel_above:,}"
         return message_dict
 
 
