@@ -97,9 +97,11 @@ class PositionToOpen:
     candles_before_confirmation: int
     long_above: float | None
     long_tp: int | None
+    long_sl: float | None
     long_weight: float | None
     short_below: float | None
     short_tp: int | None
+    short_sl: float | None
     short_weight: float | None
     cancel_above: float | None
     cancel_below: float | None
@@ -114,12 +116,14 @@ class PositionToOpen:
                 above=f"$ {self.long_above:,}",
                 target=f"{self.long_tp}%",
                 size=f"{self.long_weight}%",
+                stop_loss=f"{self.long_sl}%",
             )
         if self.short_below:
             message_dict["short"] = dict(
                 below=f"$ {self.short_below:,}",
                 target=f"{self.short_tp}%",
                 size=f"{self.short_weight}%",
+                stop_loss=f"{self.short_sl}%",
             )
 
         if self.cancel_below:

@@ -64,9 +64,6 @@ else:
     POSITION_PERCENTAGE = config("POSITION_PERCENTAGE", cast=float, default="1.0")
     logger.info(f"{POSITION_PERCENTAGE=}")
 
-# strategy
-SL_PERCENTAGE = config("SL_PERCENTAGE", cast=float, default="1")
-logger.info(f"{SL_PERCENTAGE=}")
 FORBIDDEN_NR_OF_CANDLES_BEFORE_ENTRY = config(
     "FORBIDDEN_NR_OF_CANDLES_BEFORE_ENTRY",
     cast=Csv(int),
@@ -275,13 +272,9 @@ class Exchange:
 
             # calculate position size
             if USE_FIXED_RISK:
-                usdt_size: float = (
-                    FIXED_RISK_EX_FEES / SL_PERCENTAGE * 1 / LEVERAGE * 100
-                )
+                usdt_size: float = FIXED_RISK_EX_FEES * (1 / LEVERAGE * 100)
             else:
-                usdt_size: float = (
-                    total_balance / (SL_PERCENTAGE * LEVERAGE)
-                ) * POSITION_PERCENTAGE
+                usdt_size: float = total_balance / LEVERAGE * POSITION_PERCENTAGE
             position_size: float = round(usdt_size / price * LEVERAGE * 1000, 1)
 
         except Exception as e:
@@ -434,7 +427,8 @@ class Exchange:
                 position_to_open.long_weight
                 if long_above
                 else position_to_open.short_weight
-            ),
+            )
+            / (position_to_open.long_sl if long_above else position_to_open.short_sl),
             1,
         )
         amount = max(amount, 0.1)  # minimum amount is 0.1 contract
@@ -444,7 +438,9 @@ class Exchange:
         price, stoploss_price, takeprofit_price = await self.limit_order_placement(
             direction=LONG if long_above else SHORT,
             amount=amount,
-            stoploss_percentage=SL_PERCENTAGE,
+            stoploss_percentage=(
+                position_to_open.long_sl if long_above else position_to_open.short_sl
+            ),
             takeprofit_percentage=takeprofit_percentage,
         )
 
@@ -594,11 +590,12 @@ class Exchange:
                 strategy_type="live", input_date=liquidation_datetime.date()
             )
             for row in live_algorithm_input.itertuples():
-                if row.hour_of_the_day == liquidation_datetime.hour:
+                if row.hour == liquidation_datetime.hour:
                     live_trade = row.trade
                     if live_trade:
-                        live_tp: int = row.tp_percentage
-                        live_weight: float = row.position_size_weighted
+                        live_tp: float = row.tp
+                        live_weight: float = row.weight
+                        live_sl: float = row.sl
 
             # read reversed algorithm input file
             reversed_trade: bool = False
@@ -608,21 +605,23 @@ class Exchange:
                 )
             )
             for row in reversed_algorithm_input.itertuples():
-                if row.hour_of_the_day == liquidation_datetime.hour:
+                if row.hour == liquidation_datetime.hour:
                     reversed_trade = row.trade
                     if reversed_trade:
-                        reversed_tp: int = row.tp_percentage
-                        reversed_weight: float = row.position_size_weighted
+                        reversed_tp: float = row.tp
+                        reversed_weight: float = row.weight
+                        reversed_sl: float = row.sl
 
-            long_above = short_below = short_tp = short_weight = long_tp = (
-                long_weight
-            ) = cancel_above = cancel_below = None
+            long_above = short_below = short_tp = short_sl = short_weight = long_tp = (
+                long_sl
+            ) = long_weight = cancel_above = cancel_below = None
 
             if liquidation.direction == LONG:
                 below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
                 if reversed_trade:
                     short_below = below_price
                     short_tp = reversed_tp
+                    short_sl = reversed_sl
                     short_weight = reversed_weight
                 else:
                     cancel_below = below_price
@@ -634,6 +633,7 @@ class Exchange:
                     if live_trade:
                         long_above = above_price
                         long_tp = live_tp
+                        long_sl = live_sl
                         long_weight = live_weight
                     else:
                         cancel_above = above_price
@@ -643,6 +643,7 @@ class Exchange:
                 if reversed_trade:
                     long_above = above_price
                     long_tp = reversed_tp
+                    long_sl = reversed_sl
                     long_weight = reversed_weight
                 else:
                     cancel_above = above_price
@@ -654,6 +655,7 @@ class Exchange:
                     if live_trade:
                         short_below = below_price
                         short_tp = live_tp
+                        short_sl = live_sl
                         short_weight = live_weight
                     else:
                         cancel_below = below_price
@@ -672,8 +674,10 @@ class Exchange:
                 long_above=long_above,
                 short_below=short_below,
                 short_tp=short_tp,
+                short_sl=short_sl,
                 short_weight=short_weight,
                 long_tp=long_tp,
+                long_sl=long_sl,
                 long_weight=long_weight,
                 cancel_above=cancel_above,
                 cancel_below=cancel_below,
