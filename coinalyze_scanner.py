@@ -35,7 +35,7 @@ logger.info(f"{LIQUIDATION_DAYS=}")
 LIQUIDATION_HOURS = config(
     "LIQUIDATION_HOURS",
     cast=Csv(int),
-    default="3,4,14,15,16,17",
+    default="2,3,4,14,15,16",
 )
 logger.info(f"{LIQUIDATION_HOURS=}")
 
