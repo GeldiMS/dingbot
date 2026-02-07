@@ -69,21 +69,29 @@ class PaperScanner:
     async def handle_liquidation_set(self, candle: Candle, symbols: list) -> None:
         """Handle the liquidation set and check for liquidations"""
 
-        total_long, total_short = 0, 0
+        total_long_btc, total_short_btc = 0, 0
         l_time = 0
         nr_of_liquidations = 0
+        
+        # Get BTC price for conversion
+        btc_price = candle.close
         
         for symbol_data in symbols:
             for history in symbol_data.get("history", []):
                 l_time = history.get("t", 0)
                 long = history.get("l", 0)
-                total_long += long
-                if long > 100:
+                total_long_btc += long
+                # Count as liquidation if > 0.001 BTC (~$70)
+                if long > 0.001:
                     nr_of_liquidations += 1
                 short = history.get("s", 0)
-                total_short += short
-                if short > 100:
+                total_short_btc += short
+                if short > 0.001:
                     nr_of_liquidations += 1
+
+        # Convert BTC to USD for threshold comparison
+        total_long_usd = total_long_btc * btc_price
+        total_short_usd = total_short_btc * btc_price
 
         # Check if we should trade based on mode
         is_trading_time = True
@@ -93,7 +101,7 @@ class PaperScanner:
             is_trading_time = is_trading_day and is_trading_hour
 
         if (
-            total_long > MINIMAL_LIQUIDATION
+            total_long_usd > MINIMAL_LIQUIDATION
             and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS
             and is_trading_time
         ):
@@ -102,7 +110,7 @@ class PaperScanner:
                     "l-"
                     + datetime.fromtimestamp(candle.timestamp / 1000).strftime("%H%M")
                 ),
-                amount=total_long,
+                amount=total_long_btc,
                 direction="long",
                 time=l_time,
                 nr_of_liquidations=nr_of_liquidations,
@@ -111,10 +119,10 @@ class PaperScanner:
                 during_liquidation_hours=True,  # Always true for paper
             )
             self.liquidation_set.liquidations.insert(0, long_liquidation)
-            logger.info(f"[PAPER-{self.mode}] 📈 LONG liquidation detected: {total_long:.3f} BTC")
+            logger.info(f"[PAPER-{self.mode}] 📈 LONG liquidation added: {total_long_btc:.3f} BTC (${total_long_usd:,.0f})")
             
         if (
-            total_short > MINIMAL_LIQUIDATION
+            total_short_usd > MINIMAL_LIQUIDATION
             and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS
             and is_trading_time
         ):
@@ -123,7 +131,7 @@ class PaperScanner:
                     "s-"
                     + datetime.fromtimestamp(candle.timestamp / 1000).strftime("%H%M")
                 ),
-                amount=total_short,
+                amount=total_short_btc,
                 direction="short",
                 time=l_time,
                 nr_of_liquidations=nr_of_liquidations,
@@ -132,7 +140,7 @@ class PaperScanner:
                 during_liquidation_hours=True,
             )
             self.liquidation_set.liquidations.insert(0, short_liquidation)
-            logger.info(f"[PAPER-{self.mode}] 📉 SHORT liquidation detected: {total_short:.3f} BTC")
+            logger.info(f"[PAPER-{self.mode}] 📉 SHORT liquidation added: {total_short_btc:.3f} BTC (${total_short_usd:,.0f})")
 
     async def handle_coinalyze_url(
         self, url: str, include_params: bool = True, symbols: bool = False
