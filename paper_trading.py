@@ -18,7 +18,7 @@ from typing import List
 
 from logger import logger
 from misc import Liquidation, LiquidationSet
-from coinalyze_scanner import CoinalyzeScanner, COINALYZE_LIQUIDATION_URL, LIQUIDATION_DAYS, LIQUIDATION_HOURS
+from pScanner import PaperScanner, COINALYZE_LIQUIDATION_URL, LIQUIDATION_DAYS, LIQUIDATION_HOURS
 from pExchange import PaperExchange
 from paper_logger import PaperLogger, PaperAccount
 
@@ -66,7 +66,7 @@ async def main():
     LIQUIDATIONS_247: List[Liquidation] = []
     LIQUIDATION_SET_247 = LiquidationSet(liquidations=LIQUIDATIONS_247)
     
-    scanner_247 = CoinalyzeScanner(datetime.now(), LIQUIDATION_SET_247)
+    scanner_247 = PaperScanner(datetime.now(), LIQUIDATION_SET_247, mode="24/7")
     await scanner_247.set_symbols()
     
     exchange_247 = PaperExchange(
@@ -82,7 +82,7 @@ async def main():
     LIQUIDATIONS_SCHED: List[Liquidation] = []
     LIQUIDATION_SET_SCHED = LiquidationSet(liquidations=LIQUIDATIONS_SCHED)
     
-    scanner_sched = CoinalyzeScanner(datetime.now(), LIQUIDATION_SET_SCHED)
+    scanner_sched = PaperScanner(datetime.now(), LIQUIDATION_SET_SCHED, mode="Scheduled")
     await scanner_sched.set_symbols()
     
     exchange_sched = PaperExchange(
