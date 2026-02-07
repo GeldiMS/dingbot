@@ -392,14 +392,21 @@ class PaperExchange:
         liquidation_datetime = datetime.fromtimestamp(liquidation.candle.timestamp / 1000)
         
         # Check age
-        if liquidation_datetime < (
+        age_check = liquidation_datetime < (
             self.scanner.now.replace(second=0, microsecond=0) - timedelta(minutes=15)
-        ):
+        )
+        if age_check:
+            logger.info(f"[PAPER-{self.mode}] ⏰ Liquidation too old ({liquidation_datetime}), removing")
             self.liquidation_set.liquidations.remove(liquidation)
             return
         
         # Check reaction
-        if await self.reaction_to_liquidation_is_strong(liquidation, last_candle.close):
+        is_strong = await self.reaction_to_liquidation_is_strong(liquidation, last_candle.close)
+        logger.info(f"[PAPER-{self.mode}] 🔍 Checking {liquidation.direction} liquidation: "
+                   f"price=${last_candle.close:,.0f}, candle_high=${liquidation.candle.high:,.0f}, "
+                   f"candle_low=${liquidation.candle.low:,.0f}, strong_reaction={is_strong}")
+        
+        if is_strong:
             now = self.scanner.now.replace(second=0, microsecond=0)
             candles_before_confirmation = (
                 int(round((now - liquidation_datetime).total_seconds() / 300, 0)) - 1
@@ -430,6 +437,17 @@ class PaperExchange:
                         reversed_tp = row.tp
                         reversed_weight = row.weight
                         reversed_sl = row.sl
+            
+            logger.info(f"[PAPER-{self.mode}] 📊 Hour {liquidation_datetime.hour}: live_trade={live_trade}, reversed_trade={reversed_trade}")
+            
+            # For 24/7 mode, force trade if either algorithm allows it
+            if self.mode == "24/7" and not live_trade and not reversed_trade:
+                # Default values for 24/7 mode when no algorithm says trade
+                live_trade = True
+                live_tp = 4.0
+                live_sl = 1.0
+                live_weight = 0.5
+                logger.info(f"[PAPER-{self.mode}] 🔄 24/7 mode - forcing trade with defaults")
             
             # Build position params
             long_above = short_below = short_tp = short_sl = short_weight = None
@@ -480,6 +498,7 @@ class PaperExchange:
                         cancel_below = below_price
             
             if cancel_above and cancel_below:
+                logger.info(f"[PAPER-{self.mode}] ❌ Both cancel conditions met, skipping")
                 return
             
             position_to_open = PositionToOpen(
@@ -498,6 +517,7 @@ class PaperExchange:
                 cancel_below=cancel_below,
             )
             self.positions_to_open.append(position_to_open)
+            logger.info(f"[PAPER-{self.mode}] ✅ Position to open added: long_above={long_above}, short_below={short_below}")
     
     async def run_loop(self, last_candle: Candle) -> None:
         """Run the main loop"""
