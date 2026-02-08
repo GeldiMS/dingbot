@@ -69,29 +69,22 @@ class PaperScanner:
     async def handle_liquidation_set(self, candle: Candle, symbols: list) -> None:
         """Handle the liquidation set and check for liquidations"""
 
-        total_long_btc, total_short_btc = 0, 0
+        total_long, total_short = 0, 0
         l_time = 0
         nr_of_liquidations = 0
-        
-        # Get BTC price for conversion
-        btc_price = candle.close
         
         for symbol_data in symbols:
             for history in symbol_data.get("history", []):
                 l_time = history.get("t", 0)
                 long = history.get("l", 0)
-                total_long_btc += long
-                # Count as liquidation if > 0.001 BTC (~$70)
-                if long > 0.001:
+                total_long += long
+                # Count as liquidation if > 100 (matching original bot)
+                if long > 100:
                     nr_of_liquidations += 1
                 short = history.get("s", 0)
-                total_short_btc += short
-                if short > 0.001:
+                total_short += short
+                if short > 100:
                     nr_of_liquidations += 1
-
-        # Convert BTC to USD for threshold comparison
-        total_long_usd = total_long_btc * btc_price
-        total_short_usd = total_short_btc * btc_price
 
         # Check if we should trade based on mode
         is_trading_time = True
@@ -102,14 +95,14 @@ class PaperScanner:
 
         # Only log for 24/7 mode to avoid duplicate logs
         if self.mode == "24/7":
-            max_liq_usd = max(total_long_usd, total_short_usd)
-            if max_liq_usd > 0 and max_liq_usd < MINIMAL_LIQUIDATION:
-                logger.info(f"⏸️ No trade: liquidation ${max_liq_usd:,.0f} < ${MINIMAL_LIQUIDATION:,} threshold")
-            elif max_liq_usd >= MINIMAL_LIQUIDATION:
-                logger.info(f"🔔 Liquidation detected: ${max_liq_usd:,.0f} (threshold: ${MINIMAL_LIQUIDATION:,})")
+            max_liq = max(total_long, total_short)
+            if max_liq > 0 and max_liq < MINIMAL_LIQUIDATION:
+                logger.info(f"⏸️ No trade: liquidation ${max_liq:,.0f} < ${MINIMAL_LIQUIDATION:,} threshold")
+            elif max_liq >= MINIMAL_LIQUIDATION:
+                logger.info(f"🔔 Liquidation detected: ${max_liq:,.0f} (threshold: ${MINIMAL_LIQUIDATION:,})")
 
         if (
-            total_long_usd > MINIMAL_LIQUIDATION
+            total_long > MINIMAL_LIQUIDATION
             and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS
             and is_trading_time
         ):
@@ -118,7 +111,7 @@ class PaperScanner:
                     "l-"
                     + datetime.fromtimestamp(candle.timestamp / 1000).strftime("%H%M")
                 ),
-                amount=total_long_btc,
+                amount=total_long,
                 direction="long",
                 time=l_time,
                 nr_of_liquidations=nr_of_liquidations,
@@ -129,7 +122,7 @@ class PaperScanner:
             self.liquidation_set.liquidations.insert(0, long_liquidation)
             
         if (
-            total_short_usd > MINIMAL_LIQUIDATION
+            total_short > MINIMAL_LIQUIDATION
             and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS
             and is_trading_time
         ):
@@ -138,7 +131,7 @@ class PaperScanner:
                     "s-"
                     + datetime.fromtimestamp(candle.timestamp / 1000).strftime("%H%M")
                 ),
-                amount=total_short_btc,
+                amount=total_short,
                 direction="short",
                 time=l_time,
                 nr_of_liquidations=nr_of_liquidations,
