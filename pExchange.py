@@ -49,6 +49,7 @@ MAKER_FEE = 0.0002  # 0.02%
 class PaperPosition:
     """Open paper position"""
     position_id: str
+    order_number: int  # Human-readable order number
     direction: str
     entry_price: float
     size: float
@@ -61,6 +62,7 @@ class PaperPosition:
 class PaperOrder:
     """Pending paper order"""
     order_id: str
+    order_number: int  # Human-readable order number
     direction: str
     price: float
     size: float
@@ -206,6 +208,7 @@ class PaperExchange:
                 self.pending_orders.remove(order)
                 position = PaperPosition(
                     position_id=order.order_id,
+                    order_number=order.order_number,
                     direction=order.direction,
                     entry_price=fill_price,
                     size=order.size,
@@ -220,7 +223,7 @@ class PaperExchange:
                 fee = position_value * MAKER_FEE
                 self.balance -= fee
                 
-                logger.info(f"[PAPER-{self.mode}] Order filled: {order.direction.upper()} @ ${fill_price:,.2f}")
+                logger.info(f"🟢 ORDER #{order.order_number} FILLED [{self.mode}] | {order.direction.upper()} @ ${fill_price:,.0f}")
         
         # Check positions for TP/SL
         for position in deepcopy(self.open_positions):
@@ -302,8 +305,7 @@ class PaperExchange:
                         close_reason
                     )
                 
-                logger.info(f"[PAPER-{self.mode}] Position closed: {position.direction.upper()} "
-                          f"P&L: ${pnl:+,.2f}, Balance: ${self.balance:,.2f}")
+                logger.info(f"🔴 ORDER #{position.order_number} CLOSED [{self.mode}] | {close_reason.upper()} | P&L: ${pnl:+,.2f} | Balance: ${self.balance:,.2f}")
     
     async def handle_position_to_open(
         self, position_to_open: PositionToOpen, last_candle: Candle
@@ -516,10 +518,11 @@ class PaperExchange:
         )
         self.positions_to_open.append(position_to_open)
         
-        # CLEAN ORDER LOG - only log when order is created
+        # Increment order ID and log
+        self.order_id_counter += 1
         direction = "LONG" if long_above else "SHORT"
         entry_price = long_above or short_below
-        logger.info(f"📋 ORDER CREATED [{self.mode}] | {direction} | Entry: ${entry_price:,.0f} | Reason: {liquidation.direction.upper()} liquidation ${liquidation.amount * last_candle.close:,.0f}")
+        logger.info(f"📋 ORDER #{self.order_id_counter} [{self.mode}] | {direction} | Entry: ${entry_price:,.0f} | Reason: {liquidation.direction.upper()} liquidation ${liquidation.amount:,.0f}")
     
     async def run_loop(self, last_candle: Candle) -> None:
         """Run the main loop"""
@@ -584,8 +587,10 @@ class PaperExchange:
             direction, price, stoploss_percentage, takeprofit_percentage
         )
         
+        self.order_id_counter += 1
         order = PaperOrder(
             order_id=self._generate_order_id(),
+            order_number=self.order_id_counter,
             direction=direction,
             price=price,
             size=amount,
@@ -595,15 +600,6 @@ class PaperExchange:
         )
         self.pending_orders.append(order)
         
-        if self.paper_logger:
-            self.paper_logger.log_order_placed(
-                f"Paper-{self.mode}",
-                direction,
-                price,
-                stoploss_price,
-                takeprofit_price
-            )
-        
-        logger.info(f"[PAPER-{self.mode}] Order placed: {direction.upper()} @ ${price:,.2f}")
+        logger.info(f"📋 ORDER #{self.order_id_counter} [{self.mode}] | {direction.upper()} | Entry: ${price:,.0f} | SL: ${stoploss_price:,.0f} | TP: ${takeprofit_price:,.0f}")
         
         return price, stoploss_price, takeprofit_price
