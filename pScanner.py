@@ -70,21 +70,20 @@ class PaperScanner:
         """Handle the liquidation set and check for liquidations"""
 
         total_long, total_short = 0, 0
-        l_time = 0
+        l_time = symbols[0].get("t") if len(symbols) else 0
         nr_of_liquidations = 0
         
-        for symbol_data in symbols:
-            for history in symbol_data.get("history", []):
-                l_time = history.get("t", 0)
-                long = history.get("l", 0)
-                total_long += long
-                # Count as liquidation if > 100 (matching original bot)
-                if long > 100:
-                    nr_of_liquidations += 1
-                short = history.get("s", 0)
-                total_short += short
-                if short > 100:
-                    nr_of_liquidations += 1
+        # Iterate flat list (already flattened by handle_coinalyze_url)
+        for history in symbols:
+            long = history.get("l", 0)
+            total_long += long
+            # Count as liquidation if > 100 (matching original bot)
+            if long > 100:
+                nr_of_liquidations += 1
+            short = history.get("s", 0)
+            total_short += short
+            if short > 100:
+                nr_of_liquidations += 1
 
         # Check if we should trade based on mode
         is_trading_time = True
@@ -155,7 +154,17 @@ class PaperScanner:
             )
             response.raise_for_status()
             data = response.json()
-            return data
+            
+            if symbols:
+                return data
+            
+            # Flatten the data like original bot does
+            # Returns first history item from each symbol
+            return [
+                symbol.get("history")[0]
+                for symbol in data
+                if symbol.get("history")
+            ]
         except requests.exceptions.RequestException as e:
             logger.error(f"[PAPER] Error fetching coinalyze data: {e}")
             return []
