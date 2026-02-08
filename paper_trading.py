@@ -105,7 +105,6 @@ async def main():
     logger.info(f"BTC markets being scanned: {scanner_247.symbols}")
     
     first_run = True
-    last_dashboard_update = datetime.now()
     
     while running:
         now = datetime.now()
@@ -139,15 +138,6 @@ async def main():
                 if is_trading_day and is_trading_hour:
                     await exchange_sched.run_loop(last_candle)
                     await scanner_sched.handle_liquidation_set(last_candle, liquidation_data)
-                
-                # Update dashboard every minute-ish
-                if (now - last_dashboard_update).seconds >= 60:
-                    paper_logger.print_dashboard(
-                        exchange_247.get_account_state(),
-                        exchange_sched.get_account_state(),
-                        btc_price
-                    )
-                    last_dashboard_update = now
             
             await asyncio.sleep(0.99)
         

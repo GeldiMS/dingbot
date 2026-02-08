@@ -528,14 +528,6 @@ class PaperExchange:
         
         for liquidation in deepcopy(self.liquidation_set.liquidations):
             await self.handle_liquidation(liquidation, last_candle)
-        
-        # Order summary - show if there are pending orders
-        pending_count = len(self.pending_orders)
-        positions_to_open_count = len(self.positions_to_open)
-        open_positions_count = len(self.open_positions)
-        
-        if pending_count > 0 or positions_to_open_count > 0 or open_positions_count > 0:
-            logger.info(f"📊 [{self.mode}] ORDERS: {pending_count} pending | {positions_to_open_count} waiting for entry | {open_positions_count} open positions")
     
     async def reaction_to_liquidation_is_strong(
         self, liquidation: Liquidation, price: float

@@ -75,16 +75,9 @@ class PaperLogger:
         print(f"{self.BOLD}{self.CYAN}{'='*70}{self.RESET}\n")
     
     def print_account(self, account: PaperAccount):
-        """Print account status"""
+        """Print account status - simplified"""
         emoji = "🌍" if account.mode == "24/7" else "📅"
-        
-        print(f"{self.BOLD}{emoji} {account.name.upper()} ({account.mode}){self.RESET}")
-        print(f"  Balance:     ${account.balance:,.2f}")
-        print(f"  P&L:         {self.format_currency(account.pnl)} ({self.format_percentage(account.pnl_pct)})")
-        print(f"  Trades:      {account.trades} (W:{self.GREEN}{account.wins}{self.RESET} / L:{self.RED}{account.losses}{self.RESET})")
-        print(f"  Win Rate:    {self.format_percentage(account.win_rate)}")
-        print(f"  Max DD:      {self.format_currency(-account.max_drawdown)}")
-        print()
+        print(f"{emoji} {account.name.upper()} | Balance: ${account.balance:,.2f} | P&L: ${account.pnl:+,.2f} | Trades: {account.trades} (W:{account.wins}/L:{account.losses})")
     
     def print_dashboard(self, account_247: PaperAccount, account_scheduled: PaperAccount, btc_price: float):
         """Print full dashboard"""
