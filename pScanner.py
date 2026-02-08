@@ -47,6 +47,7 @@ class PaperScanner:
             ),
             "to": int(datetime.timestamp(rounded_now)),
             "interval": INTERVAL,
+            "convert_to_usd": "true",  # Get values in USD, not BTC
         }
 
     @cached_property
