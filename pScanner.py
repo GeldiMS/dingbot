@@ -100,6 +100,14 @@ class PaperScanner:
             is_trading_hour = datetime.fromtimestamp(candle.timestamp / 1000).hour in LIQUIDATION_HOURS
             is_trading_time = is_trading_day and is_trading_hour
 
+        # Only log for 24/7 mode to avoid duplicate logs
+        if self.mode == "24/7":
+            max_liq_usd = max(total_long_usd, total_short_usd)
+            if max_liq_usd > 0 and max_liq_usd < MINIMAL_LIQUIDATION:
+                logger.info(f"⏸️ No trade: liquidation ${max_liq_usd:,.0f} < ${MINIMAL_LIQUIDATION:,} threshold")
+            elif max_liq_usd >= MINIMAL_LIQUIDATION:
+                logger.info(f"🔔 Liquidation detected: ${max_liq_usd:,.0f} (threshold: ${MINIMAL_LIQUIDATION:,})")
+
         if (
             total_long_usd > MINIMAL_LIQUIDATION
             and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS
