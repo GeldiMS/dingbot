@@ -402,6 +402,12 @@ class PaperExchange:
         is_strong = await self.reaction_to_liquidation_is_strong(liquidation, last_candle.close)
         
         if not is_strong:
+            # Log why we're waiting
+            if self.mode == "24/7":
+                if liquidation.direction == "long":
+                    logger.info(f"⏳ Waiting: price ${last_candle.close:,.0f} < candle high ${liquidation.candle.high:,.0f}")
+                else:
+                    logger.info(f"⏳ Waiting: price ${last_candle.close:,.0f} > candle low ${liquidation.candle.low:,.0f}")
             return  # Not ready yet, check again next loop
             
         now = self.scanner.now.replace(second=0, microsecond=0)
