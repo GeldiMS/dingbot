@@ -391,133 +391,129 @@ class PaperExchange:
         """Handle liquidation (same as real bot)"""
         liquidation_datetime = datetime.fromtimestamp(liquidation.candle.timestamp / 1000)
         
-        # Check age
-        age_check = liquidation_datetime < (
+        # Check age - silently remove old liquidations
+        if liquidation_datetime < (
             self.scanner.now.replace(second=0, microsecond=0) - timedelta(minutes=15)
-        )
-        if age_check:
-            logger.info(f"[PAPER-{self.mode}] ⏰ Liquidation too old ({liquidation_datetime}), removing")
+        ):
             self.liquidation_set.liquidations.remove(liquidation)
             return
         
         # Check reaction
         is_strong = await self.reaction_to_liquidation_is_strong(liquidation, last_candle.close)
-        logger.info(f"[PAPER-{self.mode}] 🔍 Checking {liquidation.direction} liquidation: "
-                   f"price=${last_candle.close:,.0f}, candle_high=${liquidation.candle.high:,.0f}, "
-                   f"candle_low=${liquidation.candle.low:,.0f}, strong_reaction={is_strong}")
         
-        if is_strong:
-            now = self.scanner.now.replace(second=0, microsecond=0)
-            candles_before_confirmation = (
-                int(round((now - liquidation_datetime).total_seconds() / 300, 0)) - 1
-            )
-            self.liquidation_set.liquidations.remove(liquidation)
+        if not is_strong:
+            return  # Not ready yet, check again next loop
             
-            # Read algorithm inputs
-            live_trade = False
-            live_algorithm_input = await self.get_algorithm_input_file(
-                strategy_type="live", input_date=liquidation_datetime.date()
-            )
-            for row in live_algorithm_input.itertuples():
-                if row.hour == liquidation_datetime.hour:
-                    live_trade = row.trade
-                    if live_trade:
-                        live_tp = row.tp
-                        live_weight = row.weight
-                        live_sl = row.sl
-            
-            reversed_trade = False
-            reversed_algorithm_input = await self.get_algorithm_input_file(
-                strategy_type="reversed", input_date=liquidation_datetime.date()
-            )
-            for row in reversed_algorithm_input.itertuples():
-                if row.hour == liquidation_datetime.hour:
-                    reversed_trade = row.trade
-                    if reversed_trade:
-                        reversed_tp = row.tp
-                        reversed_weight = row.weight
-                        reversed_sl = row.sl
-            
-            logger.info(f"[PAPER-{self.mode}] 📊 Hour {liquidation_datetime.hour}: live_trade={live_trade}, reversed_trade={reversed_trade}")
-            
-            # For 24/7 mode, force trade if either algorithm allows it
-            if self.mode == "24/7" and not live_trade and not reversed_trade:
-                # Default values for 24/7 mode when no algorithm says trade
-                live_trade = True
-                live_tp = 4.0
-                live_sl = 1.0
-                live_weight = 0.5
-                logger.info(f"[PAPER-{self.mode}] 🔄 24/7 mode - forcing trade with defaults")
-            
-            # Build position params
-            long_above = short_below = short_tp = short_sl = short_weight = None
-            long_tp = long_sl = long_weight = cancel_above = cancel_below = None
-            
-            if liquidation.direction == LONG:
-                below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
+        now = self.scanner.now.replace(second=0, microsecond=0)
+        candles_before_confirmation = (
+            int(round((now - liquidation_datetime).total_seconds() / 300, 0)) - 1
+        )
+        self.liquidation_set.liquidations.remove(liquidation)
+        
+        # Read algorithm inputs
+        live_trade = False
+        live_algorithm_input = await self.get_algorithm_input_file(
+            strategy_type="live", input_date=liquidation_datetime.date()
+        )
+        for row in live_algorithm_input.itertuples():
+            if row.hour == liquidation_datetime.hour:
+                live_trade = row.trade
+                if live_trade:
+                    live_tp = row.tp
+                    live_weight = row.weight
+                    live_sl = row.sl
+        
+        reversed_trade = False
+        reversed_algorithm_input = await self.get_algorithm_input_file(
+            strategy_type="reversed", input_date=liquidation_datetime.date()
+        )
+        for row in reversed_algorithm_input.itertuples():
+            if row.hour == liquidation_datetime.hour:
+                reversed_trade = row.trade
                 if reversed_trade:
-                    short_below = below_price
-                    short_tp = reversed_tp
-                    short_sl = reversed_sl
-                    short_weight = reversed_weight
-                else:
-                    cancel_below = below_price
-                
-                above_price = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
-                if candles_before_confirmation > 1:
-                    cancel_above = above_price
-                else:
-                    if live_trade:
-                        long_above = above_price
-                        long_tp = live_tp
-                        long_sl = live_sl
-                        long_weight = live_weight
-                    else:
-                        cancel_above = above_price
+                    reversed_tp = row.tp
+                    reversed_weight = row.weight
+                    reversed_sl = row.sl
+        
+        # For 24/7 mode, force trade if neither algorithm allows it
+        if self.mode == "24/7" and not live_trade and not reversed_trade:
+            live_trade = True
+            live_tp = 4.0
+            live_sl = 1.0
+            live_weight = 0.5
+        
+        # Build position params
+        long_above = short_below = short_tp = short_sl = short_weight = None
+        long_tp = long_sl = long_weight = cancel_above = cancel_below = None
+        
+        if liquidation.direction == LONG:
+            below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
+            if reversed_trade:
+                short_below = below_price
+                short_tp = reversed_tp
+                short_sl = reversed_sl
+                short_weight = reversed_weight
+            else:
+                cancel_below = below_price
             
-            elif liquidation.direction == SHORT:
-                above_price = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
-                if reversed_trade:
+            above_price = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
+            if candles_before_confirmation > 1:
+                cancel_above = above_price
+            else:
+                if live_trade:
                     long_above = above_price
-                    long_tp = reversed_tp
-                    long_sl = reversed_sl
-                    long_weight = reversed_weight
+                    long_tp = live_tp
+                    long_sl = live_sl
+                    long_weight = live_weight
                 else:
                     cancel_above = above_price
-                
-                below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
-                if candles_before_confirmation > 1:
-                    cancel_below = below_price
+        
+        elif liquidation.direction == SHORT:
+            above_price = round(last_candle.close * 1.005, EXCHANGE_PRICE_PRECISION)
+            if reversed_trade:
+                long_above = above_price
+                long_tp = reversed_tp
+                long_sl = reversed_sl
+                long_weight = reversed_weight
+            else:
+                cancel_above = above_price
+            
+            below_price = round(last_candle.close * 0.995, EXCHANGE_PRICE_PRECISION)
+            if candles_before_confirmation > 1:
+                cancel_below = below_price
+            else:
+                if live_trade:
+                    short_below = below_price
+                    short_tp = live_tp
+                    short_sl = live_sl
+                    short_weight = live_weight
                 else:
-                    if live_trade:
-                        short_below = below_price
-                        short_tp = live_tp
-                        short_sl = live_sl
-                        short_weight = live_weight
-                    else:
-                        cancel_below = below_price
-            
-            if cancel_above and cancel_below:
-                logger.info(f"[PAPER-{self.mode}] ❌ Both cancel conditions met, skipping")
-                return
-            
-            position_to_open = PositionToOpen(
-                _id=liquidation._id,
-                liquidation=liquidation,
-                candles_before_confirmation=candles_before_confirmation,
-                long_above=long_above,
-                short_below=short_below,
-                short_tp=short_tp,
-                short_sl=short_sl,
-                short_weight=short_weight,
-                long_tp=long_tp,
-                long_sl=long_sl,
-                long_weight=long_weight,
-                cancel_above=cancel_above,
-                cancel_below=cancel_below,
-            )
-            self.positions_to_open.append(position_to_open)
-            logger.info(f"[PAPER-{self.mode}] ✅ Position to open added: long_above={long_above}, short_below={short_below}")
+                    cancel_below = below_price
+        
+        if cancel_above and cancel_below:
+            return  # No valid entry, skip silently
+        
+        position_to_open = PositionToOpen(
+            _id=liquidation._id,
+            liquidation=liquidation,
+            candles_before_confirmation=candles_before_confirmation,
+            long_above=long_above,
+            short_below=short_below,
+            short_tp=short_tp,
+            short_sl=short_sl,
+            short_weight=short_weight,
+            long_tp=long_tp,
+            long_sl=long_sl,
+            long_weight=long_weight,
+            cancel_above=cancel_above,
+            cancel_below=cancel_below,
+        )
+        self.positions_to_open.append(position_to_open)
+        
+        # CLEAN ORDER LOG - only log when order is created
+        direction = "LONG" if long_above else "SHORT"
+        entry_price = long_above or short_below
+        logger.info(f"📋 ORDER CREATED [{self.mode}] | {direction} | Entry: ${entry_price:,.0f} | Reason: {liquidation.direction.upper()} liquidation ${liquidation.amount * last_candle.close:,.0f}")
     
     async def run_loop(self, last_candle: Candle) -> None:
         """Run the main loop"""
@@ -532,6 +528,14 @@ class PaperExchange:
         
         for liquidation in deepcopy(self.liquidation_set.liquidations):
             await self.handle_liquidation(liquidation, last_candle)
+        
+        # Order summary - show if there are pending orders
+        pending_count = len(self.pending_orders)
+        positions_to_open_count = len(self.positions_to_open)
+        open_positions_count = len(self.open_positions)
+        
+        if pending_count > 0 or positions_to_open_count > 0 or open_positions_count > 0:
+            logger.info(f"📊 [{self.mode}] ORDERS: {pending_count} pending | {positions_to_open_count} waiting for entry | {open_positions_count} open positions")
     
     async def reaction_to_liquidation_is_strong(
         self, liquidation: Liquidation, price: float

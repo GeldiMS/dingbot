@@ -130,25 +130,7 @@ async def main():
                 
                 # === 24/7 Account: Always trade ===
                 await exchange_247.run_loop(last_candle)
-                
-                # Handle liquidations for 24/7 (always)
-                # The scanner already handles the filtering internally
                 await scanner_247.handle_liquidation_set(last_candle, liquidation_data)
-                
-                # Log liquidation analysis
-                for liq_data in liquidation_data:
-                    symbol = liq_data.get("symbol", "unknown")
-                    for hist in liq_data.get("history", []):
-                        long_btc = hist.get("l", 0)
-                        short_btc = hist.get("s", 0)
-                        # Convert BTC to USD
-                        long_usd = long_btc * btc_price
-                        short_usd = short_btc * btc_price
-                        if long_btc > 0 or short_btc > 0:
-                            if long_usd >= 2000 or short_usd >= 2000:
-                                logger.info(f"✅ TRADE SIGNAL: {symbol} | Long: {long_btc:.3f} BTC (${long_usd:,.0f}) | Short: {short_btc:.3f} BTC (${short_usd:,.0f})")
-                            else:
-                                logger.info(f"⏭️ SKIPPED (too small): {symbol} | Long: ${long_usd:,.0f} | Short: ${short_usd:,.0f} (need >$2000)")
                 
                 # === Scheduled Account: Only trade during configured hours ===
                 is_trading_day = now.weekday() in LIQUIDATION_DAYS

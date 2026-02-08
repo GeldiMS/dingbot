@@ -115,11 +115,10 @@ class PaperScanner:
                 time=l_time,
                 nr_of_liquidations=nr_of_liquidations,
                 candle=candle,
-                on_liquidation_days=True,  # Always true for paper
-                during_liquidation_hours=True,  # Always true for paper
+                on_liquidation_days=True,
+                during_liquidation_hours=True,
             )
             self.liquidation_set.liquidations.insert(0, long_liquidation)
-            logger.info(f"[PAPER-{self.mode}] 📈 LONG liquidation added: {total_long_btc:.3f} BTC (${total_long_usd:,.0f})")
             
         if (
             total_short_usd > MINIMAL_LIQUIDATION
@@ -140,7 +139,6 @@ class PaperScanner:
                 during_liquidation_hours=True,
             )
             self.liquidation_set.liquidations.insert(0, short_liquidation)
-            logger.info(f"[PAPER-{self.mode}] 📉 SHORT liquidation added: {total_short_btc:.3f} BTC (${total_short_usd:,.0f})")
 
     async def handle_coinalyze_url(
         self, url: str, include_params: bool = True, symbols: bool = False
@@ -156,8 +154,6 @@ class PaperScanner:
             )
             response.raise_for_status()
             data = response.json()
-            if not symbols:
-                logger.info(f"COINALYZE: {data}")
             return data
         except requests.exceptions.RequestException as e:
             logger.error(f"[PAPER] Error fetching coinalyze data: {e}")
