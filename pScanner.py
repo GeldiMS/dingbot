@@ -73,6 +73,10 @@ class PaperScanner:
         l_time = symbols[0].get("t") if len(symbols) else 0
         nr_of_liquidations = 0
         
+        # DEBUG: Log raw API response (only first 3 items)
+        if self.mode == "24/7" and len(symbols) > 0:
+            logger.info(f"DEBUG API response ({len(symbols)} items): {symbols[:3]}")
+        
         # Iterate flat list (already flattened by handle_coinalyze_url)
         for history in symbols:
             long = history.get("l", 0)
