@@ -1,7 +1,7 @@
 """
 Paper trading scanner - Modified for 24/7 trading (no time restrictions)
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decouple import config, Csv
 from functools import cached_property
 
@@ -36,10 +36,9 @@ class PaperScanner:
 
     @property
     def request_params(self) -> dict:
-        """Returns the params for the request to the API"""
-        rounded_now = self.now.replace(second=0, microsecond=0) - timedelta(
-            minutes=self.now.minute % 5
-        )
+        """Returns the params for the request to the API - MATCHES ORIGINAL BOT"""
+        # Use UTC time to match Railway deployment
+        rounded_now = self.now.replace(second=0, microsecond=0)
         return {
             "symbols": self.symbols,
             "from": int(
@@ -47,7 +46,7 @@ class PaperScanner:
             ),
             "to": int(datetime.timestamp(rounded_now)),
             "interval": INTERVAL,
-            "convert_to_usd": "true",  # Get values in USD, not BTC
+            # NOTE: No convert_to_usd - matching original bot
         }
 
     @cached_property

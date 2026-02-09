@@ -13,7 +13,7 @@ import asyncio
 import signal
 import sys
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from logger import logger
@@ -107,7 +107,7 @@ async def main():
     first_run = True
     
     while running:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         
         # Main loop - every 5 minutes (matching real bot)
         if (now.minute % 5 == 0 and now.second == 0) or first_run:
