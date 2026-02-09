@@ -36,8 +36,7 @@ class PaperScanner:
 
     @property
     def request_params(self) -> dict:
-        """Returns the params for the request to the API - MATCHES ORIGINAL BOT"""
-        # Use UTC time to match Railway deployment
+        """Returns the params for the request to the API"""
         rounded_now = self.now.replace(second=0, microsecond=0)
         return {
             "symbols": self.symbols,
@@ -46,7 +45,7 @@ class PaperScanner:
             ),
             "to": int(datetime.timestamp(rounded_now)),
             "interval": INTERVAL,
-            # NOTE: No convert_to_usd - matching original bot
+            "convert_to_usd": "true",  # Get USD values - MINIMAL_LIQUIDATION is in USD
         }
 
     @cached_property
@@ -150,6 +149,12 @@ class PaperScanner:
         """Handle the url and check for liquidations"""
         try:
             params = self.request_params if include_params else {}
+            
+            # DEBUG: Log the request params
+            if include_params and self.mode == "24/7":
+                logger.info(f"DEBUG API call: {url}")
+                logger.info(f"DEBUG params: {params}")
+            
             response = requests.get(
                 url,
                 params=params,
@@ -159,16 +164,27 @@ class PaperScanner:
             response.raise_for_status()
             data = response.json()
             
+            # DEBUG: Log raw response length
+            if include_params and self.mode == "24/7":
+                logger.info(f"DEBUG raw response: {len(data)} items, first: {data[:1] if data else 'EMPTY'}")
+            
             if symbols:
                 return data
             
             # Flatten the data like original bot does
             # Returns first history item from each symbol
-            return [
+            result = [
                 symbol.get("history")[0]
                 for symbol in data
                 if symbol.get("history")
             ]
+            
+            # DEBUG: Log flattened result
+            if self.mode == "24/7":
+                logger.info(f"DEBUG flattened: {len(result)} items, first: {result[:1] if result else 'EMPTY'}")
+            
+            return result
         except requests.exceptions.RequestException as e:
             logger.error(f"[PAPER] Error fetching coinalyze data: {e}")
             return []
+
