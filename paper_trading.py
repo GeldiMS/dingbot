@@ -107,11 +107,11 @@ class PaperExchange:
         # Position sizing (matches original bot)
         self._position_size = 0
         
-        logger.info(f"[{mode}] Paper exchange initialized with ${starting_balance:,.2f}")
+        logger.info(f"💰 Starting balance: ${starting_balance:,.2f}")
     
     async def set_leverage(self, symbol: str, leverage: int, direction: str) -> None:
         """Simulate setting leverage"""
-        logger.info(f"[{self.mode}] Set leverage to {leverage}x for {direction}")
+        pass  # Silently set leverage
     
     async def get_last_candle(self, now: datetime) -> Optional[Candle]:
         """Get the last candle from Binance (real data)"""
@@ -300,9 +300,9 @@ class PaperExchange:
         
         # Log the waiting condition
         if long_above:
-            logger.info(f"[{self.mode}] ⏳ Waiting: {liquidation._id} LONG above ${long_above:,.0f}")
+            logger.info(f"⏳ {liquidation._id} waiting: LONG if price > ${long_above:,.0f}")
         if short_below:
-            logger.info(f"[{self.mode}] ⏳ Waiting: {liquidation._id} SHORT below ${short_below:,.0f}")
+            logger.info(f"⏳ {liquidation._id} waiting: SHORT if price < ${short_below:,.0f}")
     
     async def handle_position_to_open(
         self, position_to_open: PositionToOpen, last_candle: Candle
@@ -403,10 +403,7 @@ class PaperExchange:
         )
         self.positions.append(position)
         
-        logger.info(
-            f"[{self.mode}] 📋 ORDER #{order_id} | {direction.upper()} @ ${entry_price:,.0f} | "
-            f"SL: ${sl_price:,.0f} | TP: ${tp_price:,.0f} | Size: {size}"
-        )
+        logger.info(f"📋 #{order_id} {direction.upper()} @ ${entry_price:,.0f} | SL: ${sl_price:,.0f} | TP: ${tp_price:,.0f}")
     
     async def check_positions(self) -> None:
         """Check if any positions should be closed (SL/TP hit)"""
@@ -467,10 +464,7 @@ class PaperExchange:
             self.losses += 1
             emoji = "🔴"
         
-        logger.info(
-            f"[{self.mode}] {emoji} ORDER #{position.order_id} CLOSED | {reason} | "
-            f"P&L: ${pnl:+,.2f} | Balance: ${self.balance:,.2f}"
-        )
+        logger.info(f"{emoji} #{position.order_id} {reason} | P&L: ${pnl:+,.2f} | Bal: ${self.balance:,.2f}")
     
     async def run_loop(self, last_candle: Candle) -> None:
         """Run the main loop (mirrors original)"""
@@ -592,8 +586,8 @@ async def main() -> None:
     # Set initial position size
     await exchange.set_position_sizes()
     
-    logger.info(f"Scanning BTC markets: {scanner.symbols[:100]}...")
-    logger.info("Paper trading started!")
+    logger.info(f"📡 Scanning {len(scanner.symbols.split(','))} BTC markets")
+    logger.info("✅ Paper trading started")
     
     first_run = True
     
