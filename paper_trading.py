@@ -499,7 +499,7 @@ class PaperScanner(CoinalyzeScanner):
         self.mode = mode
     
     async def handle_liquidation_set(self, candle: Candle, symbols: list) -> None:
-        """Handle liquidation set - 24/7 mode ignores day/hour restrictions"""
+        """Handle liquidation set - logs all, trades only during scheduled hours"""
         
         total_long, total_short = 0, 0
         l_time = symbols[0].get("t") if len(symbols) else 0
@@ -515,14 +515,13 @@ class PaperScanner(CoinalyzeScanner):
             if short > 100:
                 nr_of_liquidations += 1
         
-        # Determine if we should add to liquidation list
+        # Determine if we should add to liquidation list (for trading)
         is_trading_day = datetime.fromtimestamp(candle.timestamp / 1000).weekday() in LIQUIDATION_DAYS
         is_trading_hour = datetime.fromtimestamp(candle.timestamp / 1000).hour in LIQUIDATION_HOURS
+        should_trade = is_trading_day and is_trading_hour
         
-        # For 24/7 mode: always allow trading
-        # For Scheduled mode: only during configured days/hours
-        should_add = (self.mode == "24/7") or (is_trading_day and is_trading_hour)
-        
+        # Log ALL liquidations above threshold (like original bot)
+        # But only add to trade list during scheduled hours
         if total_long > MINIMAL_LIQUIDATION and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS:
             long_liquidation = Liquidation(
                 _id=f"l-{datetime.fromtimestamp(candle.timestamp / 1000).strftime('%H%M')}",
@@ -534,10 +533,13 @@ class PaperScanner(CoinalyzeScanner):
                 on_liquidation_days=is_trading_day,
                 during_liquidation_hours=is_trading_hour,
             )
-            if should_add:
+            # Always log the detection
+            trade_status = "📊 WILL TRADE" if should_trade else "👀 (outside trading hours)"
+            logger.info(f"🔔 LONG liquidation: ${total_long:,.0f} {trade_status}")
+            
+            # Only add to trade list during scheduled hours
+            if should_trade:
                 self.liquidation_set.liquidations.insert(0, long_liquidation)
-                if self.mode == "24/7":
-                    logger.info(f"🔔 LONG liquidation: ${total_long:,.0f}")
         
         if total_short > MINIMAL_LIQUIDATION and nr_of_liquidations >= MINIMAL_NR_OF_LIQUIDATIONS:
             short_liquidation = Liquidation(
@@ -550,10 +552,13 @@ class PaperScanner(CoinalyzeScanner):
                 on_liquidation_days=is_trading_day,
                 during_liquidation_hours=is_trading_hour,
             )
-            if should_add:
+            # Always log the detection
+            trade_status = "📊 WILL TRADE" if should_trade else "👀 (outside trading hours)"
+            logger.info(f"🔔 SHORT liquidation: ${total_short:,.0f} {trade_status}")
+            
+            # Only add to trade list during scheduled hours
+            if should_trade:
                 self.liquidation_set.liquidations.insert(0, short_liquidation)
-                if self.mode == "24/7":
-                    logger.info(f"🔔 SHORT liquidation: ${total_short:,.0f}")
 
 
 # ================================================================
