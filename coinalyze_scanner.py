@@ -185,8 +185,6 @@ class CoinalyzeScanner:
             )
             response.raise_for_status()
             response_json = response.json()
-            if response_json and not symbols:
-                logger.info(f"COINALYZE: {response_json}")
         except Exception as e:
             logger.error(str(e))
             if USE_DISCORD:
