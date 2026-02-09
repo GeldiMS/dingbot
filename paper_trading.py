@@ -107,7 +107,7 @@ async def main():
     first_run = True
     
     while running:
-        now = datetime.now(timezone.utc)
+        now = datetime.now()  # Local time (Netherlands/CET) - matches real bot
         
         # Main loop - every 5 minutes (matching real bot)
         if (now.minute % 5 == 0 and now.second == 0) or first_run:
