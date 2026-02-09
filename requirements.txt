@@ -1,0 +1,6 @@
+ccxt==4.5.35
+discord==2.3.2
+discord.py==2.6.4
+pandas==3.0.0
+python-decouple==3.8
+requests==2.32.5
