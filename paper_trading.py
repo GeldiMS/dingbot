@@ -561,51 +561,36 @@ class PaperScanner(CoinalyzeScanner):
 # ================================================================
 async def main() -> None:
     print("\n" + "=" * 70)
-    print("  📊 PAPER TRADING BOT")
+    print("  📊 PAPER TRADING BOT (Scheduled Mode)")
     print("=" * 70)
-    print(f"  • 24/7 Account - Trades all hours")
-    print(f"  • Scheduled Account - Trades Mon-Fri, hours {list(LIQUIDATION_HOURS)}")
+    print(f"  • Trading Days: Mon-Fri (0-4)")
+    print(f"  • Trading Hours: {list(LIQUIDATION_HOURS)}")
     print(f"  • Starting Balance: ${STARTING_BALANCE:,.2f}")
     print("=" * 70 + "\n")
     
-    # === Setup 24/7 Account ===
-    liquidations_247: List[Liquidation] = []
-    liquidation_set_247 = LiquidationSet(liquidations=liquidations_247)
-    
-    scanner_247 = PaperScanner(datetime.now(), liquidation_set_247, mode="24/7")
-    await scanner_247.set_symbols()
-    
-    exchange_247 = PaperExchange(
-        liquidation_set_247, scanner_247, STARTING_BALANCE, mode="24/7"
-    )
-    scanner_247.exchange = exchange_247
-    
     # === Setup Scheduled Account ===
-    liquidations_sched: List[Liquidation] = []
-    liquidation_set_sched = LiquidationSet(liquidations=liquidations_sched)
+    liquidations: List[Liquidation] = []
+    liquidation_set = LiquidationSet(liquidations=liquidations)
     
-    scanner_sched = PaperScanner(datetime.now(), liquidation_set_sched, mode="Scheduled")
-    await scanner_sched.set_symbols()
+    scanner = PaperScanner(datetime.now(), liquidation_set, mode="Scheduled")
+    await scanner.set_symbols()
     
-    exchange_sched = PaperExchange(
-        liquidation_set_sched, scanner_sched, STARTING_BALANCE, mode="Scheduled"
+    exchange = PaperExchange(
+        liquidation_set, scanner, STARTING_BALANCE, mode="Scheduled"
     )
-    scanner_sched.exchange = exchange_sched
+    scanner.exchange = exchange
     
-    # Set leverage for both
+    # Set leverage
     for direction in ["long", "short"]:
-        await exchange_247.set_leverage(TICKER, LEVERAGE, direction)
-        await exchange_sched.set_leverage(TICKER, LEVERAGE, direction)
+        await exchange.set_leverage(TICKER, LEVERAGE, direction)
     
-    # Set initial position sizes
-    await exchange_247.set_position_sizes()
-    await exchange_sched.set_position_sizes()
+    # Set initial position size
+    await exchange.set_position_sizes()
     
-    logger.info(f"Scanning BTC markets: {scanner_247.symbols[:100]}...")
+    logger.info(f"Scanning BTC markets: {scanner.symbols[:100]}...")
     logger.info("Paper trading started!")
     
     first_run = True
-    start_time = datetime.now()
     
     while True:
         now = datetime.now()
@@ -616,27 +601,23 @@ async def main() -> None:
                 first_run = False
             
             # Update scanner time
-            scanner_247.now = now
-            scanner_sched.now = now
+            scanner.now = now
             
             # Get last candle
-            last_candle = await exchange_247.get_last_candle(now)
+            last_candle = await exchange.get_last_candle(now)
             if last_candle:
-                # Run loop for both accounts
-                await exchange_247.run_loop(last_candle)
-                await exchange_sched.run_loop(last_candle)
+                # Run loop
+                await exchange.run_loop(last_candle)
                 
-                # Fetch new liquidations (using same API call, processed by both scanners)
-                symbols = await scanner_247.handle_coinalyze_url(COINALYZE_LIQUIDATION_URL)
-                await scanner_247.handle_liquidation_set(last_candle, symbols)
-                await scanner_sched.handle_liquidation_set(last_candle, deepcopy(symbols))
+                # Fetch new liquidations
+                symbols = await scanner.handle_coinalyze_url(COINALYZE_LIQUIDATION_URL)
+                await scanner.handle_liquidation_set(last_candle, symbols)
             
             await sleep(0.99)
         
         # Recalculate position sizes (every 5 min at :04)
         if now.minute % 5 == 4 and now.second == 0:
-            await exchange_247.set_position_sizes()
-            await exchange_sched.set_position_sizes()
+            await exchange.set_position_sizes()
             await sleep(0.99)
         
         await sleep(0.01)
