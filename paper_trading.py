@@ -143,17 +143,16 @@ class PaperExchange:
     async def set_position_sizes(self) -> None:
         """Calculate position size based on balance"""
         try:
-            price = await self.get_price()
-            if price:
-                # Position size in contracts (matches original bot logic)
-                position_size = int(self.balance * LEVERAGE / price)
-                if position_size != self._position_size:
-                    self._position_size = position_size
+            # Position size in USD (total value of position)
+            # Example: $1,000 balance * 1% position * 25x leverage = $250 nominal
+            # For simplicity, we use POSITION_PERCENTAGE * balance * LEVERAGE
+            from exchange import POSITION_PERCENTAGE
+            self._position_size = self.balance * (POSITION_PERCENTAGE / 100) * LEVERAGE
         except Exception as e:
             logger.error(f"[{self.mode}] Error setting position size: {e}")
     
     @property
-    def position_size(self) -> int:
+    def position_size(self) -> float:
         return self._position_size
     
     def get_algorithm_input_file(self, strategy_type: str, input_date) -> pd.DataFrame:
@@ -300,9 +299,9 @@ class PaperExchange:
         
         # Log the waiting condition
         if long_above:
-            logger.info(f"⏳ {liquidation._id} waiting: LONG if price > ${long_above:,.0f}")
+            logger.info(f"⏳ {liquidation._id} waiting: LONG if price > ${long_above:,.1f}")
         if short_below:
-            logger.info(f"⏳ {liquidation._id} waiting: SHORT if price < ${short_below:,.0f}")
+            logger.info(f"⏳ {liquidation._id} waiting: SHORT if price < ${short_below:,.1f}")
     
     async def handle_position_to_open(
         self, position_to_open: PositionToOpen, last_candle: Candle
@@ -386,9 +385,8 @@ class PaperExchange:
             sl_price = round(entry_price * (1 + sl_pct / 100), EXCHANGE_PRICE_PRECISION)
             tp_price = round(entry_price * (1 - tp_pct / 100), EXCHANGE_PRICE_PRECISION)
         
-        # Calculate position size
-        size = round(self._position_size * weight / sl_pct, 1)
-        size = max(size, 0.1)
+        # Calculate position size in USD (nominal)
+        size = self._position_size * weight
         
         # Create position
         position = PaperPosition(
@@ -403,7 +401,7 @@ class PaperExchange:
         )
         self.positions.append(position)
         
-        logger.info(f"📋 #{order_id} {direction.upper()} @ ${entry_price:,.0f} | SL: ${sl_price:,.0f} | TP: ${tp_price:,.0f}")
+        logger.info(f"📋 #{order_id} {direction.upper()} @ ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP: ${tp_price:,.1f}")
     
     async def check_positions(self) -> None:
         """Check if any positions should be closed (SL/TP hit)"""
@@ -452,7 +450,7 @@ class PaperExchange:
         else:
             pnl_pct = (position.entry_price - close_price) / position.entry_price
         
-        pnl = position.size * pnl_pct * LEVERAGE
+        pnl = position.size * pnl_pct
         self.balance += pnl
         self.total_pnl += pnl
         self.total_trades += 1
